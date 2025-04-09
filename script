@@ -132,7 +132,7 @@ task.spawn(function()
     statusLabel.TextStrokeTransparency = 0.6
     statusLabel.Font = Enum.Font.GothamSemibold
     statusLabel.TextScaled = true
-    statusLabel.Text = "⏳ Starting..."
+    statusLabel.Text = "⏳ starting..."
 
     local function updateStatus(text, color)
         statusLabel.Text = text
@@ -146,6 +146,9 @@ task.spawn(function()
 
     game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not _G.AutoClick or waiting then return end
+
+        -- Giới hạn dt để tránh lỗi lớn do lag
+        dt = math.clamp(dt, 0.01, 0.1)
 
         local barPos = bar.AbsolutePosition
         local greenPos = green.AbsolutePosition
@@ -162,23 +165,24 @@ task.spawn(function()
         for _, v in ipairs(velocities) do avgVelocity += v end
         avgVelocity /= #velocities
 
-        -- Kiểm tra ổn định
+        -- Kiểm tra green ổn định
         table.insert(greenXHistory, greenX)
         if #greenXHistory > 6 then table.remove(greenXHistory, 1) end
 
         local greenStable = true
         for i = 2, #greenXHistory do
-            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 0.5 then
+            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 1 then -- nới lỏng từ 0.5 -> 1
                 greenStable = false
                 break
             end
         end
 
+        -- Chuyển trạng thái ổn định
         if greenStable ~= wasGreenStable then
             if greenStable then
                 greenSettleTime = tick()
                 canClickNow = true
-                updateStatus("🟢 Green settled", Color3.fromRGB(0, 255, 100))
+                updateStatus("🟢 Green stable", Color3.fromRGB(0, 255, 100))
             else
                 canClickNow = false
                 updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
@@ -186,20 +190,24 @@ task.spawn(function()
             wasGreenStable = greenStable
         end
 
+        -- Dự đoán vị trí bar
         local predictedX = barX + avgVelocity * dt
         local greenLeft = greenPos.X
         local greenRight = greenLeft + green.AbsoluteSize.X
 
+        -- Kiểm tra điều kiện click
         if greenStable and (tick() - greenSettleTime) >= 0.2 and canClickNow then
             if predictedX >= greenLeft and predictedX <= greenRight then
                 waiting = true
                 canClickNow = false
-                updateStatus("🖱️ Clicked!", Color3.fromRGB(0, 150, 255))
+                updateStatus("🖱️ Click!", Color3.fromRGB(0, 150, 255))
                 mouse1click()
                 task.delay(0.08, function()
                     waiting = false
-                    updateStatus("⏳ Waiting...", Color3.fromRGB(200, 200, 200))
+                    updateStatus("⏳ Wait for the next time...", Color3.fromRGB(200, 200, 200))
                 end)
+            else
+                updateStatus("🎯 Off target", Color3.fromRGB(255, 100, 100))
             end
         end
     end)
