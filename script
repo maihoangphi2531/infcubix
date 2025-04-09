@@ -142,7 +142,7 @@ task.spawn(function()
         local greenLeft = greenPos.X
         local greenRight = greenLeft + green.AbsoluteSize.X
 
-        -- Nếu dự đoán bar đi vào green zone--------------------
+        -- Nếu dự đoán bar đi vào green zonefghfgh
         if predictedX >= greenLeft and predictedX <= greenRight then
             waiting = true
             mouse1click()
