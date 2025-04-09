@@ -147,11 +147,6 @@ task.spawn(function()
     game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not _G.AutoClick or waiting then return end
 
-        if not minigameGui.Visible then
-            updateStatus("❌ Game Over", Color3.fromRGB(200, 50, 50))
-            return
-        end
-
         local barPos = bar.AbsolutePosition
         local greenPos = green.AbsolutePosition
         local barX = barPos.X + bar.AbsoluteSize.X / 2
