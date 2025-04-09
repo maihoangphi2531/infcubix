@@ -105,13 +105,39 @@ task.spawn(function()
     local player = game.Players.LocalPlayer
     local mouse = player:GetMouse()
     local gui = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
-    local bar = gui.Vlogging.PhoneTimingMinigame.Moving_Bar
-    local green = gui.Vlogging.PhoneTimingMinigame.Green
+    local minigameGui = gui.Vlogging.PhoneTimingMinigame
+    local bar = minigameGui.Moving_Bar
+    local green = minigameGui.Green
 
-    local prevX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
+    local prevBarX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
     local prevTime = tick()
     local waiting = false
+    local canClickNow = false
     local velocities = {}
+
+    local greenXHistory = {}
+    local greenSettleTime = tick()
+    local wasGreenStable = true
+
+    local statusGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+    statusGui.Name = "ClickStatusGui"
+    statusGui.ResetOnSpawn = false
+
+    local statusLabel = Instance.new("TextLabel", statusGui)
+    statusLabel.Size = UDim2.new(0, 180, 0, 30)
+    statusLabel.Position = UDim2.new(1, -200, 0, 100)
+    statusLabel.BackgroundTransparency = 0.3
+    statusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.TextStrokeTransparency = 0.6
+    statusLabel.Font = Enum.Font.GothamSemibold
+    statusLabel.TextScaled = true
+    statusLabel.Text = "⏳ Starting..."
+
+    local function updateStatus(text, color)
+        statusLabel.Text = text
+        statusLabel.TextColor3 = color
+    end
 
     local function mouse1click()
         mouse1press()
@@ -121,32 +147,65 @@ task.spawn(function()
     game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not _G.AutoClick or waiting then return end
 
+        if not minigameGui.Visible then
+            updateStatus("❌ Game Over", Color3.fromRGB(200, 50, 50))
+            return
+        end
+
         local barPos = bar.AbsolutePosition
         local greenPos = green.AbsolutePosition
         local barX = barPos.X + bar.AbsoluteSize.X / 2
         local greenX = greenPos.X + green.AbsoluteSize.X / 2
 
         local now = tick()
-        local velocity = (barX - prevX) / (now - prevTime)
-        prevX, prevTime = barX, now
+        local barVelocity = (barX - prevBarX) / (now - prevTime)
+        prevBarX, prevTime = barX, now
 
-        -- Làm mượt vận tốc bằng cách trung bình hóa 3 frame gần nhất
-        table.insert(velocities, velocity)
+        table.insert(velocities, barVelocity)
         if #velocities > 3 then table.remove(velocities, 1) end
-
         local avgVelocity = 0
         for _, v in ipairs(velocities) do avgVelocity += v end
         avgVelocity /= #velocities
+
+        -- Kiểm tra ổn định
+        table.insert(greenXHistory, greenX)
+        if #greenXHistory > 6 then table.remove(greenXHistory, 1) end
+
+        local greenStable = true
+        for i = 2, #greenXHistory do
+            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 0.5 then
+                greenStable = false
+                break
+            end
+        end
+
+        if greenStable ~= wasGreenStable then
+            if greenStable then
+                greenSettleTime = tick()
+                canClickNow = true
+                updateStatus("🟢 Green settled", Color3.fromRGB(0, 255, 100))
+            else
+                canClickNow = false
+                updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
+            end
+            wasGreenStable = greenStable
+        end
 
         local predictedX = barX + avgVelocity * dt
         local greenLeft = greenPos.X
         local greenRight = greenLeft + green.AbsoluteSize.X
 
-        -- Nếu dự đoán bar đi vào green zonefghfgh
-        if predictedX >= greenLeft and predictedX <= greenRight then
-            waiting = true
-            mouse1click()
-            task.delay(0.08, function() waiting = false end)
+        if greenStable and (tick() - greenSettleTime) >= 0.2 and canClickNow then
+            if predictedX >= greenLeft and predictedX <= greenRight then
+                waiting = true
+                canClickNow = false
+                updateStatus("🖱️ Clicked!", Color3.fromRGB(0, 150, 255))
+                mouse1click()
+                task.delay(0.08, function()
+                    waiting = false
+                    updateStatus("⏳ Waiting...", Color3.fromRGB(200, 200, 200))
+                end)
+            end
         end
     end)
 end)
