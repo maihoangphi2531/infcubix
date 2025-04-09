@@ -105,40 +105,48 @@ task.spawn(function()
     local player = game.Players.LocalPlayer
     local mouse = player:GetMouse()
     local gui = player:WaitForChild("PlayerGui"):WaitForChild("MainGui")
-    local bar = gui:WaitForChild("Vlogging"):WaitForChild("PhoneTimingMinigame"):WaitForChild("Moving_Bar")
-    local green = gui.Vlogging.PhoneTimingMinigame:WaitForChild("Green")
+    local bar = gui.Vlogging.PhoneTimingMinigame.Moving_Bar
+    local green = gui.Vlogging.PhoneTimingMinigame.Green
 
-    local prevBarX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
+    local prevX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
     local prevTime = tick()
     local waiting = false
+    local velocities = {}
 
     local function mouse1click()
         mouse1press()
         mouse1release()
     end
 
-    local heartbeat = game:GetService("RunService").Heartbeat
-
-    heartbeat:Connect(function(dt)
+    game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not _G.AutoClick or waiting then return end
 
-        local barX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
-        local greenX = green.AbsolutePosition.X + green.AbsoluteSize.X / 2
-        local distance = greenX - barX
+        local barPos = bar.AbsolutePosition
+        local greenPos = green.AbsolutePosition
+        local barX = barPos.X + bar.AbsoluteSize.X / 2
+        local greenX = greenPos.X + green.AbsoluteSize.X / 2
 
-        local currentTime = tick()
-        local velocity = (barX - prevBarX) / (currentTime - prevTime)
-        prevBarX, prevTime = barX, currentTime
+        local now = tick()
+        local velocity = (barX - prevX) / (now - prevTime)
+        prevX, prevTime = barX, now
 
-        if math.abs(velocity) < 500 then return end
-        if (velocity > 0 and distance < 0) or (velocity < 0 and distance > 0) then return end
+        -- Làm mượt vận tốc bằng cách trung bình hóa 3 frame gần nhất
+        table.insert(velocities, velocity)
+        if #velocities > 3 then table.remove(velocities, 1) end
 
-        local predicted = barX + velocity * dt
-        if math.abs(predicted - greenX) < 2 then
+        local avgVelocity = 0
+        for _, v in ipairs(velocities) do avgVelocity += v end
+        avgVelocity /= #velocities
+
+        local predictedX = barX + avgVelocity * dt
+        local greenLeft = greenPos.X
+        local greenRight = greenLeft + green.AbsoluteSize.X
+
+        -- Nếu dự đoán bar đi vào green zone--------------------
+        if predictedX >= greenLeft and predictedX <= greenRight then
             waiting = true
-            
             mouse1click()
-            task.delay(0.1, function() waiting = false end)
+            task.delay(0.08, function() waiting = false end)
         end
     end)
 end)
