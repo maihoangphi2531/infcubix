@@ -58,7 +58,13 @@ createToggle("AutoClick", UDim2.new(0, 10, 0, 65), false, function(state)
     _G.AutoClick = state
 end)
 
--- AutoTeleport Logic
+-- Nút bật/tắt 3D Rendering với giá trị mặc định là ON (true)
+-- Nút bật/tắt FPS Boost (3D Rendering) với giá trị mặc định là TẮT Boost (tức BẬT 3D)
+createToggle("FPS Boost", UDim2.new(0, 10, 0, 120), false, function(state)
+    RunService:Set3dRenderingEnabled(not state)
+end)
+
+
 -- AutoTeleport Logic
 task.spawn(function()
     local Attractions = workspace:WaitForChild("Attractions")
