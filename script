@@ -2,7 +2,7 @@ local player = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- Global toggles
+-- Global togglessss
 _G.AutoTeleport = false
 _G.AutoClick = false
 
@@ -113,6 +113,7 @@ task.spawn(function()
     local prevTime = tick()
     local waiting = false
     local canClickNow = false
+    local greenMovedAfterClick = false
     local velocities = {}
     local greenXHistory = {}
     local greenSettleTime = tick()
@@ -148,22 +149,28 @@ task.spawn(function()
     game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not _G.AutoClick then return end
 
-        -- Nếu waiting quá 1.5s hoặc green di chuyển thì reset
-        if waiting and (tick() - lastClickTime >= 1.5 or math.abs(green.AbsolutePosition.X - lastGreenPos) > 2) then
-            waiting = false
-            canClickNow = false
-            updateStatus("♻️ Reset timeout", Color3.fromRGB(255, 200, 0))
-        end
-
-        if waiting then return end
-
         dt = math.clamp(dt, 0.01, 0.1)
 
         local barPos = bar.AbsolutePosition
         local greenPos = green.AbsolutePosition
         local barX = barPos.X + bar.AbsoluteSize.X / 2
         local greenX = greenPos.X + green.AbsoluteSize.X / 2
+
+        -- Kiểm tra green có di chuyển sau khi click không
+        if waiting and math.abs(greenPos.X - lastGreenPos) > 2 then
+            greenMovedAfterClick = true
+        end
         lastGreenPos = greenPos.X
+
+        -- Nếu chờ quá lâu hoặc green đã di chuyển sau khi click thì reset
+        if waiting and (tick() - lastClickTime >= 1.5 or greenMovedAfterClick) then
+            waiting = false
+            canClickNow = false
+            greenMovedAfterClick = false
+            updateStatus("♻️ Reset timeout", Color3.fromRGB(255, 200, 0))
+        end
+
+        if waiting then return end
 
         local now = tick()
         local barVelocity = (barX - prevBarX) / (now - prevTime)
@@ -186,17 +193,16 @@ task.spawn(function()
             end
         end
 
-        if greenStable ~= wasGreenStable then
-            if greenStable then
-                greenSettleTime = tick()
-                canClickNow = true
-                updateStatus("🟢 Green stable", Color3.fromRGB(0, 255, 100))
-            else
-                canClickNow = false
-                updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
-            end
-            wasGreenStable = greenStable
+        -- Chỉ khi ổn định lại sau khi bị kẹt thì mới bật lại trạng thái sẵn sàng click
+        if greenStable and not wasGreenStable then
+            greenSettleTime = tick()
+            canClickNow = true
+            updateStatus("🟢 Green stable", Color3.fromRGB(0, 255, 100))
+        elseif not greenStable and wasGreenStable then
+            canClickNow = false
+            updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
         end
+        wasGreenStable = greenStable
 
         local predictedX = barX + avgVelocity * dt
         local greenLeft = greenPos.X
@@ -215,7 +221,7 @@ task.spawn(function()
                     end
                 end)
             else
-                updateStatus("🎯 Off targets", Color3.fromRGB(255, 100, 100))
+                updateStatus("🎯 Off target", Color3.fromRGB(255, 100, 100))
             end
         end
     end)
