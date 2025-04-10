@@ -2,7 +2,7 @@ local player = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- Global togglessss
+-- Global toggles
 _G.AutoTeleport = false
 _G.AutoClick = false
 
@@ -101,6 +101,8 @@ task.spawn(function()
     end)
 end)
 
+
+
 task.spawn(function()
     local player = game.Players.LocalPlayer
     local mouse = player:GetMouse()
@@ -112,20 +114,21 @@ task.spawn(function()
     local prevBarX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
     local prevTime = tick()
     local waiting = false
+    local waitingStart = 0
     local canClickNow = false
-    local greenMovedAfterClick = false
     local velocities = {}
     local greenXHistory = {}
     local greenSettleTime = tick()
-    local wasGreenStable = true
-    local lastClickTime = 0
+    local wasGreenStable = false
     local lastGreenPos = green.AbsolutePosition.X
 
-    local statusGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+    -- GUI hiện trạng thái
+    local statusGui = Instance.new("ScreenGui")
     statusGui.Name = "ClickStatusGui"
     statusGui.ResetOnSpawn = false
+    statusGui.Parent = player:WaitForChild("PlayerGui")
 
-    local statusLabel = Instance.new("TextLabel", statusGui)
+    local statusLabel = Instance.new("TextLabel")
     statusLabel.Size = UDim2.new(0, 200, 0, 32)
     statusLabel.Position = UDim2.new(1, -220, 0, 100)
     statusLabel.BackgroundTransparency = 0.3
@@ -135,6 +138,7 @@ task.spawn(function()
     statusLabel.Font = Enum.Font.GothamSemibold
     statusLabel.TextScaled = true
     statusLabel.Text = "⏳ Starting..."
+    statusLabel.Parent = statusGui
 
     local function updateStatus(text, color)
         statusLabel.Text = text
@@ -151,35 +155,40 @@ task.spawn(function()
 
         dt = math.clamp(dt, 0.01, 0.1)
 
-        local barPos = bar.AbsolutePosition
+        local barX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
         local greenPos = green.AbsolutePosition
-        local barX = barPos.X + bar.AbsoluteSize.X / 2
         local greenX = greenPos.X + green.AbsoluteSize.X / 2
 
-        -- Kiểm tra green có di chuyển sau khi click không
-        if waiting and math.abs(greenPos.X - lastGreenPos) > 2 then
-            greenMovedAfterClick = true
+        -- Kiểm tra nếu Green đã di chuyển trong khi đang chờ
+        if waiting then
+            if math.abs(greenPos.X - lastGreenPos) > 1 then
+                waiting = false
+                canClickNow = false
+                updateStatus("🔁 Green moved - Reset", Color3.fromRGB(255, 255, 0))
+            elseif tick() - waitingStart > 3 then
+                waiting = false
+                canClickNow = false
+                updateStatus("❗ Timeout - Reset", Color3.fromRGB(255, 0, 0))
+            else
+                lastGreenPos = greenPos.X
+                return
+            end
         end
+
         lastGreenPos = greenPos.X
-
-        -- Nếu chờ quá lâu hoặc green đã di chuyển sau khi click thì reset
-        if waiting and (tick() - lastClickTime >= 1.5 or greenMovedAfterClick) then
-            waiting = false
-            canClickNow = false
-            greenMovedAfterClick = false
-            updateStatus("♻️ Reset timeout", Color3.fromRGB(255, 200, 0))
-        end
-
-        if waiting then return end
 
         local now = tick()
         local barVelocity = (barX - prevBarX) / (now - prevTime)
-        prevBarX, prevTime = barX, now
+        prevBarX = barX
+        prevTime = now
 
         table.insert(velocities, barVelocity)
         if #velocities > 3 then table.remove(velocities, 1) end
+
         local avgVelocity = 0
-        for _, v in ipairs(velocities) do avgVelocity += v end
+        for _, v in ipairs(velocities) do
+            avgVelocity += v
+        end
         avgVelocity /= #velocities
 
         table.insert(greenXHistory, greenX)
@@ -193,7 +202,6 @@ task.spawn(function()
             end
         end
 
-        -- Chỉ khi ổn định lại sau khi bị kẹt thì mới bật lại trạng thái sẵn sàng click
         if greenStable and not wasGreenStable then
             greenSettleTime = tick()
             canClickNow = true
@@ -208,16 +216,19 @@ task.spawn(function()
         local greenLeft = greenPos.X
         local greenRight = greenLeft + green.AbsoluteSize.X
 
-        if greenStable and (tick() - greenSettleTime) >= 0.2 and canClickNow then
+        if greenStable and canClickNow and (tick() - greenSettleTime >= 0.2) then
             if predictedX >= greenLeft and predictedX <= greenRight then
                 waiting = true
+                waitingStart = tick()
                 canClickNow = false
-                lastClickTime = tick()
                 updateStatus("🖱️ Click!", Color3.fromRGB(0, 150, 255))
                 mouse1click()
-                task.delay(0.08, function()
+
+                task.delay(2, function()
                     if waiting then
-                        updateStatus("⏳ Wait for the next time...", Color3.fromRGB(200, 200, 200))
+                        waiting = false
+                        canClickNow = true
+                        updateStatus("⏳ Ready", Color3.fromRGB(150, 255, 150))
                     end
                 end)
             else
