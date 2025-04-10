@@ -114,25 +114,26 @@ task.spawn(function()
     local waiting = false
     local canClickNow = false
     local velocities = {}
-
     local greenXHistory = {}
     local greenSettleTime = tick()
     local wasGreenStable = true
+    local lastClickTime = 0
+    local lastGreenPos = green.AbsolutePosition.X
 
     local statusGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
     statusGui.Name = "ClickStatusGui"
     statusGui.ResetOnSpawn = false
 
     local statusLabel = Instance.new("TextLabel", statusGui)
-    statusLabel.Size = UDim2.new(0, 180, 0, 30)
-    statusLabel.Position = UDim2.new(1, -200, 0, 100)
+    statusLabel.Size = UDim2.new(0, 200, 0, 32)
+    statusLabel.Position = UDim2.new(1, -220, 0, 100)
     statusLabel.BackgroundTransparency = 0.3
     statusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     statusLabel.TextColor3 = Color3.new(1, 1, 1)
     statusLabel.TextStrokeTransparency = 0.6
     statusLabel.Font = Enum.Font.GothamSemibold
     statusLabel.TextScaled = true
-    statusLabel.Text = "⏳ starting..."
+    statusLabel.Text = "⏳ Starting..."
 
     local function updateStatus(text, color)
         statusLabel.Text = text
@@ -145,15 +146,24 @@ task.spawn(function()
     end
 
     game:GetService("RunService").RenderStepped:Connect(function(dt)
-        if not _G.AutoClick or waiting then return end
+        if not _G.AutoClick then return end
 
-        -- Giới hạn dt để tránh lỗi lớn do lag
+        -- Nếu waiting quá 1.5s hoặc green di chuyển thì reset
+        if waiting and (tick() - lastClickTime >= 1.5 or math.abs(green.AbsolutePosition.X - lastGreenPos) > 2) then
+            waiting = false
+            canClickNow = false
+            updateStatus("♻️ Reset timeout", Color3.fromRGB(255, 200, 0))
+        end
+
+        if waiting then return end
+
         dt = math.clamp(dt, 0.01, 0.1)
 
         local barPos = bar.AbsolutePosition
         local greenPos = green.AbsolutePosition
         local barX = barPos.X + bar.AbsoluteSize.X / 2
         local greenX = greenPos.X + green.AbsoluteSize.X / 2
+        lastGreenPos = greenPos.X
 
         local now = tick()
         local barVelocity = (barX - prevBarX) / (now - prevTime)
@@ -165,19 +175,17 @@ task.spawn(function()
         for _, v in ipairs(velocities) do avgVelocity += v end
         avgVelocity /= #velocities
 
-        -- Kiểm tra green ổn định
         table.insert(greenXHistory, greenX)
         if #greenXHistory > 6 then table.remove(greenXHistory, 1) end
 
         local greenStable = true
         for i = 2, #greenXHistory do
-            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 1 then -- nới lỏng từ 0.5 -> 1
+            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 1 then
                 greenStable = false
                 break
             end
         end
 
-        -- Chuyển trạng thái ổn định
         if greenStable ~= wasGreenStable then
             if greenStable then
                 greenSettleTime = tick()
@@ -190,24 +198,24 @@ task.spawn(function()
             wasGreenStable = greenStable
         end
 
-        -- Dự đoán vị trí bar
         local predictedX = barX + avgVelocity * dt
         local greenLeft = greenPos.X
         local greenRight = greenLeft + green.AbsoluteSize.X
 
-        -- Kiểm tra điều kiện click
         if greenStable and (tick() - greenSettleTime) >= 0.2 and canClickNow then
             if predictedX >= greenLeft and predictedX <= greenRight then
                 waiting = true
                 canClickNow = false
+                lastClickTime = tick()
                 updateStatus("🖱️ Click!", Color3.fromRGB(0, 150, 255))
                 mouse1click()
                 task.delay(0.08, function()
-                    waiting = false
-                    updateStatus("⏳ Wait for the next time...", Color3.fromRGB(200, 200, 200))
+                    if waiting then
+                        updateStatus("⏳ Wait for the next time...", Color3.fromRGB(200, 200, 200))
+                    end
                 end)
             else
-                updateStatus("🎯 Off target", Color3.fromRGB(255, 100, 100))
+                updateStatus("🎯 Off targets", Color3.fromRGB(255, 100, 100))
             end
         end
     end)
