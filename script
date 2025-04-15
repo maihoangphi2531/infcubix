@@ -150,90 +150,97 @@ task.spawn(function()
         mouse1release()
     end
 
-    game:GetService("RunService").RenderStepped:Connect(function(dt)
-        if not _G.AutoClick then return end
+   game:GetService("RunService").RenderStepped:Connect(function(dt)
+    if not _G.AutoClick then return end
 
-        dt = math.clamp(dt, 0.01, 0.1)
+    dt = math.clamp(dt, 0.01, 0.1)
 
-        local barX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
-        local greenPos = green.AbsolutePosition
-        local greenX = greenPos.X + green.AbsoluteSize.X / 2
+    local barX = bar.AbsolutePosition.X + bar.AbsoluteSize.X / 2
+    local greenPos = green.AbsolutePosition
+    local greenX = greenPos.X + green.AbsoluteSize.X / 2
 
-        -- Kiểm tra nếu Green đã di chuyển trong khi đang chờ
-        if waiting then
-            if math.abs(greenPos.X - lastGreenPos) > 1 then
-                waiting = false
-                canClickNow = false
-                updateStatus("🔁 Green moved - Reset", Color3.fromRGB(255, 255, 0))
-            elseif tick() - waitingStart > 3 then
-                waiting = false
-                canClickNow = false
-                updateStatus("❗ Timeout - Reset", Color3.fromRGB(255, 0, 0))
-            else
-                lastGreenPos = greenPos.X
-                return
-            end
-        end
-
-        lastGreenPos = greenPos.X
-
-        local now = tick()
-        local barVelocity = (barX - prevBarX) / (now - prevTime)
-        prevBarX = barX
-        prevTime = now
-
-        table.insert(velocities, barVelocity)
-        if #velocities > 3 then table.remove(velocities, 1) end
-
-        local avgVelocity = 0
-        for _, v in ipairs(velocities) do
-            avgVelocity += v
-        end
-        avgVelocity /= #velocities
-
-        table.insert(greenXHistory, greenX)
-        if #greenXHistory > 6 then table.remove(greenXHistory, 1) end
-
-        local greenStable = true
-        for i = 2, #greenXHistory do
-            if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 1 then
-                greenStable = false
-                break
-            end
-        end
-
-        if greenStable and not wasGreenStable then
-            greenSettleTime = tick()
-            canClickNow = true
-            updateStatus("🟢 Green stable", Color3.fromRGB(0, 255, 100))
-        elseif not greenStable and wasGreenStable then
+    if waiting then
+        if math.abs(greenPos.X - lastGreenPos) > 1 then
+            waiting = false
             canClickNow = false
-            updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
+            updateStatus("🔁 Green moved - Reset", Color3.fromRGB(255, 255, 0))
+        elseif tick() - waitingStart > 3 then
+            waiting = false
+            canClickNow = false
+            updateStatus("❗ Timeout - Reset", Color3.fromRGB(255, 0, 0))
+        else
+            lastGreenPos = greenPos.X
+            return
         end
-        wasGreenStable = greenStable
+    end
 
-        local predictedX = barX + avgVelocity * dt
-        local greenLeft = greenPos.X
-        local greenRight = greenLeft + green.AbsoluteSize.X
+    lastGreenPos = greenPos.X
 
-        if greenStable and canClickNow and (tick() - greenSettleTime >= 0.2) then
-            if predictedX >= greenLeft and predictedX <= greenRight then
-                waiting = true
-                waitingStart = tick()
-                canClickNow = false
-                updateStatus("🖱️ Click!", Color3.fromRGB(0, 150, 255))
-                mouse1click()
+    -- Velocity Calculation
+    local now = tick()
+    local barVelocity = (barX - prevBarX) / (now - prevTime)
+    prevBarX = barX
+    prevTime = now
 
-                task.delay(2, function()
-                    if waiting then
-                        waiting = false
-                        canClickNow = true
-                        updateStatus("⏳ Ready", Color3.fromRGB(150, 255, 150))
-                    end
-                end)
-            else
-                updateStatus("🎯 Off target", Color3.fromRGB(255, 100, 100))
-            end
+    table.insert(velocities, barVelocity)
+    if #velocities > 5 then table.remove(velocities, 1) end
+
+    -- Weighted average velocity (gives more importance to recent values)
+    local totalWeight = 0
+    local weightedVelocity = 0
+    for i, v in ipairs(velocities) do
+        local weight = i
+        totalWeight += weight
+        weightedVelocity += v * weight
+    end
+    local avgVelocity = weightedVelocity / totalWeight
+
+    table.insert(greenXHistory, greenX)
+    if #greenXHistory > 6 then table.remove(greenXHistory, 1) end
+
+    local greenStable = true
+    for i = 2, #greenXHistory do
+        if math.abs(greenXHistory[i] - greenXHistory[i - 1]) > 1 then
+            greenStable = false
+            break
         end
-    end)
+    end
+
+    if greenStable and not wasGreenStable then
+        greenSettleTime = tick()
+        canClickNow = true
+        updateStatus("🟢 Green stable", Color3.fromRGB(0, 255, 100))
+    elseif not greenStable and wasGreenStable then
+        canClickNow = false
+        updateStatus("🔁 Green moved", Color3.fromRGB(255, 200, 0))
+    end
+    wasGreenStable = greenStable
+
+    -- Predict bar position slightly ahead
+    local predictedX = barX + avgVelocity * dt * 2 -- lookahead multiplier
+
+    local margin = 2
+    local greenLeft = greenPos.X - margin
+    local greenRight = greenPos.X + green.AbsoluteSize.X + margin
+
+    if greenStable and canClickNow and (tick() - greenSettleTime >= 0.1) then
+        if predictedX >= greenLeft and predictedX <= greenRight then
+            waiting = true
+            waitingStart = tick()
+            canClickNow = false
+            updateStatus("🖱️ Click!", Color3.fromRGB(0, 150, 255))
+            mouse1click()
+
+            task.delay(1.8, function() -- giảm delay một chút
+                if waiting then
+                    waiting = false
+                    canClickNow = true
+                    updateStatus("⏳ Ready", Color3.fromRGB(150, 255, 150))
+                end
+            end)
+        else
+            updateStatus("🎯 Off target", Color3.fromRGB(255, 100, 100))
+        end
+    end
 end)
+end) 
