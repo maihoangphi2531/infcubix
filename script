@@ -1,3 +1,22 @@
+-- Nguồn kiểm tra riêng biệt cho PhoneHandle và nhấn T nếu thiếu
+task.spawn(function()
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+
+    while true do
+        task.wait(1) -- kiểm tra mỗi 1 giây
+
+        local hallo = workspace:FindFirstChild("Hallo95che")
+        if hallo and not hallo:FindFirstChild("PhoneHandle") then
+            -- Giả lập nhấn phím T
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.T, false, game)
+            task.wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.T, false, game)
+
+            print("Đã gửi phím T vì không tìm thấy PhoneHandle")
+        end
+    end
+end)
+
 local player = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
